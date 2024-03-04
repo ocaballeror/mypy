@@ -1493,6 +1493,9 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
         show_untyped = not self.is_typeshed_stub or self.options.warn_incomplete_stub
         check_incomplete_defs = self.options.disallow_incomplete_defs and has_explicit_annotation
         if show_untyped and (self.options.disallow_untyped_defs or check_incomplete_defs):
+            # if fdef.name == "update_runners_log":
+            #     breakpoint()
+            # breakpoint()
             if fdef.type is None and self.options.disallow_untyped_defs:
                 if not fdef.arguments or (
                     len(fdef.arguments) == 1
@@ -1519,8 +1522,9 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
                 elif fdef.is_coroutine and isinstance(ret_type, Instance):
                     if is_unannotated_any(self.get_coroutine_return_type(ret_type)):
                         self.fail(message_registry.RETURN_TYPE_EXPECTED, fdef)
-                if any(is_unannotated_any(t) for t in fdef.type.arg_types):
-                    self.fail(message_registry.ARGUMENT_TYPE_EXPECTED, fdef)
+                for arg, arg_type in zip(fdef.arguments, fdef.type.arg_types):
+                    if is_unannotated_any(arg_type):
+                        self.fail(message_registry.ARGUMENT_TYPE_EXPECTED, arg, allow_dups=True)
 
     def check___new___signature(self, fdef: FuncDef, typ: CallableType) -> None:
         self_type = fill_typevars_with_any(fdef.info)
@@ -7053,13 +7057,20 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
         return TempNode(t, context=context)
 
     def fail(
-        self, msg: str | ErrorMessage, context: Context, *, code: ErrorCode | None = None
+        self,
+        msg: str | ErrorMessage,
+        context: Context,
+        *,
+        code: ErrorCode | None = None,
+        allow_dups: bool = False,
     ) -> None:
         """Produce an error message."""
+        if isinstance(context, FuncDef):
+            context.end_line = context.line
         if isinstance(msg, ErrorMessage):
-            self.msg.fail(msg.value, context, code=msg.code)
+            self.msg.fail(msg.value, context, code=msg.code, allow_dups=allow_dups)
             return
-        self.msg.fail(msg, context, code=code)
+        self.msg.fail(msg, context, code=code, allow_dups=True)
 
     def note(
         self,
